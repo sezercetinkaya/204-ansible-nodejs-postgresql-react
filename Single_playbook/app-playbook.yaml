@@ -1,0 +1,169 @@
+---
+- name: INSTALL DOCKER
+  hosts: development
+  become: yes
+  tasks:
+    - name: Installing Docker Prerequisite packages
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+
+    - name: Configuring docker-ce repo
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: 0644
+    
+    - name: Installing Docker latest version
+      yum:
+        name: docker
+        state: present
+    
+    - name: Starting and Enabling Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add the user 'ec2-user' with a bash shell, appending the group 'docker' to the user's groups
+      ansible.builtin.user:
+        name: ec2-user
+        shell: /bin/bash
+        groups: docker
+        append: yes
+        
+- name: CREATE A POSTGRESQL CONTAINER
+  hosts: _ansible_postgresql
+  vars_files:
+    - postgres-secret.yaml
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Single_playbook/Dockerfile-postgres
+        dest: ~/project_ansible/student_files/todo-app-pern/database/Dockerfile
+
+    - name: Build Postgres image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/database
+        name: simaox/postgres
+        source: build
+
+    - name: Create the postgres container
+      become: true    
+      docker_container:
+        name: postgres-db
+        image: simaox/postgres
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD }}"          
+          # POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD | password_hash ('sha512') }}"
+        volumes:
+          - postgres-vol:/var/lib/postgresql/data
+        detach: yes
+
+- name: "CREATE A NODEJS CONTAINER"
+  hosts: _ansible_nodejs
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+        force: true   
+
+    - name: Insert the private IP of the database server to env file
+      ansible.builtin.replace:
+         path: ~/project_ansible/student_files/todo-app-pern/server/.env
+         regexp: <private ip of postgresql instance>
+         replace: "{{ hostvars['Name_ansible_postgresql'].ans_public_ip }}"
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Single_playbook/Dockerfile-nodejs
+        dest: ~/project_ansible/student_files/todo-app-pern/server/Dockerfile
+
+    - name: Build Nodejs image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/server
+        name: simaox/nodejs
+        source: build
+
+    - name: Create the nodejs container
+      become: true
+      docker_container:
+        name: nodejs-backend
+        image: simaox/nodejs
+        ports:
+          - "5000:5000"
+        detach: yes
+
+- name: "CREATE A REACT CONTAINER"
+  hosts: _ansible_react
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+        force: true   
+
+    - name: Insert the public IP of the frontend server to env file
+      ansible.builtin.replace:
+         path: ~/project_ansible/student_files/todo-app-pern/client/.env
+         regexp: <public ip of nodejs>
+         replace: "{{ hostvars['Name_ansible_nodejs'].ans_public_ip }}"
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Single_playbook/Dockerfile-react
+        dest: ~/project_ansible/student_files/todo-app-pern/client/Dockerfile
+
+    - name: Build React image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/client
+        name: simaox/react
+        source: build
+
+    - name: Create the nodejs container
+      become: true
+      docker_container:
+        name: react-frontend
+        image: simaox/react
+        ports:
+          - "3000:3000"
+        detach: yes

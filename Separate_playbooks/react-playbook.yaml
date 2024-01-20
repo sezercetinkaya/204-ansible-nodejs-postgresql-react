@@ -1,0 +1,50 @@
+---
+- name: NODEJS FACTS
+  hosts: _ansible_postgresql
+  tasks:
+    - debug: 
+        var: hostvars['Name_ansible_nodejs'].ans_public_ip
+
+- name: "CREATE A REACT CONTAINER"
+  hosts: _ansible_react
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+        force: true   
+
+    - name: Insert the public IP of the frontend server to env file
+      ansible.builtin.replace:
+         path: ~/project_ansible/student_files/todo-app-pern/client/.env
+         regexp: <public ip of nodejs>
+         replace: "{{ hostvars['Name_ansible_nodejs'].ans_public_ip }}"
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Separate_playbooks/Dockerfile-react
+        dest: ~/project_ansible/student_files/todo-app-pern/client/Dockerfile
+
+    - name: Build React image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/client
+        name: simaox/react
+        source: build
+
+    - name: Create the nodejs container
+      become: true
+      docker_container:
+        name: react-frontend
+        image: simaox/react
+        ports:
+          - "3000:3000"
+        detach: yes

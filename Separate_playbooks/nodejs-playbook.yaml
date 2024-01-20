@@ -1,0 +1,50 @@
+---
+- name: POSTGRESQL FACTS
+  hosts: _ansible_postgresql
+  tasks:
+    - debug: 
+        var: hostvars['Name_ansible_postgresql'].ans_public_ip
+
+- name: "CREATE A NODEJS CONTAINER"
+  hosts: _ansible_nodejs
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+        force: true   
+
+    - name: Insert the private IP of the database server to env file
+      ansible.builtin.replace:
+         path: ~/project_ansible/student_files/todo-app-pern/server/.env
+         regexp: <private ip of postgresql instance>
+         replace: "{{ hostvars['Name_ansible_postgresql'].ans_public_ip }}"
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Separate_playbooks/Dockerfile-nodejs
+        dest: ~/project_ansible/student_files/todo-app-pern/server/Dockerfile
+
+    - name: Build Nodejs image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/server
+        name: simaox/nodejs
+        source: build
+
+    - name: Create the nodejs container
+      become: true
+      docker_container:
+        name: nodejs-backend
+        image: simaox/nodejs
+        ports:
+          - "5000:5000"
+        detach: yes

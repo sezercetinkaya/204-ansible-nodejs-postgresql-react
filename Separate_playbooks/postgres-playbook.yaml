@@ -1,0 +1,44 @@
+---
+- name: CREATE A POSTGRESQL CONTAINER
+  hosts: _ansible_postgresql
+  vars_files:
+    - postgres-secret.yaml
+  tasks:
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: present
+        update_cache: true
+    
+    - name: Clone the git repo to the remote host
+      ansible.builtin.git:
+        repo: 'https://github.com/Yunus-Altay/204-Ansible-publish-website-postgresql-nodejs-react.git'
+        dest: ~/project_ansible/
+
+    - name: Copy dockerfile 
+      ansible.builtin.copy:
+        src: ~/204-Ansible-publish-website-postgresql-nodejs-react/Separate_playbooks/Dockerfile-postgres
+        dest: ~/project_ansible/student_files/todo-app-pern/database/Dockerfile
+
+    - name: Build Postgres image and push it to the private repo
+      become: true
+      community.docker.docker_image:
+        build:
+          path: /home/ec2-user/project_ansible/student_files/todo-app-pern/database
+        name: simaox/postgres
+        source: build
+
+    - name: Create the postgres container
+      become: true    
+      docker_container:
+        name: postgres-db
+        image: simaox/postgres
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD }}"          
+          # POSTGRES_PASSWORD: "{{ POSTGRES_PASSWORD | password_hash ('sha512') }}"
+        volumes:
+          - postgres-vol:/var/lib/postgresql/data
+        detach: yes

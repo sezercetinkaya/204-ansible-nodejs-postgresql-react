@@ -1,0 +1,37 @@
+---
+- name: INSTALL DOCKER
+  hosts: development
+  become: yes
+  tasks:
+    - name: Installing Docker Prerequisite packages
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+
+    - name: Configuring docker-ce repo
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: 0644
+    
+    - name: Installing Docker latest version
+      yum:
+        name: docker
+        state: present
+    
+    - name: Starting and Enabling Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add the user 'ec2-user' with a bash shell, appending the group 'docker' to the user's groups
+      ansible.builtin.user:
+        name: ec2-user
+        shell: /bin/bash
+        groups: docker
+        append: yes

@@ -1,0 +1,25 @@
+---
+- name: Install and Start apache
+  hosts: development
+  become: yes
+  roles:
+    - docker-installation-centos
+
+- name: CREATE A POSTGRESQL CONTAINER
+  hosts: _ansible_postgresql
+  vars_files:
+    - postgres-secret.yaml
+  roles:
+    - postgres-db
+
+- name: "CREATE A NODEJS CONTAINER"
+  hosts: _ansible_nodejs
+  roles:
+    - nodejs-backend
+
+- name: "CREATE A REACT CONTAINER"
+  hosts: _ansible_react
+  roles:
+    - react-frontend
+
+# locate the 'postgres-secret.yaml' and 'vault_passwd.sh' under the same folder with app-role-playbook.yaml
